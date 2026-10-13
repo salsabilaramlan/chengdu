@@ -1,70 +1,55 @@
-/* Direct Google Sheets API adapter. Google consent + spreadsheet sharing govern access.
- * Access tokens live in memory only. There is no public proxy or service-account key. */
+/* Chengdu Apps Script adapter. The group access code stays in memory, never GitHub. */
 (() => {
-  const ID = '1I8HLPXRftPiVzR35NPCyU4d9T3SbThZGVjiiqKTvliI';
-  const SCOPE = 'https://www.googleapis.com/auth/spreadsheets';
-  let token = '', expiry = 0, writing = false;
-  const quote = name => "'" + name.replaceAll("'", "''") + "'";
-  const allowed = {
-    '03 Tugasan': {columns:[7], statuses:['Belum mula','Dalam proses','Selesai','Perlu semak'], key:0},
-    '08 Packing': {columns:[6,7,8], statuses:['Belum sedia','Sedia','Sudah pack','Tidak perlu'], key:1},
-    '15 Dokumen Digital': {columns:[2,3,4], statuses:['Belum sedia','Sedia','Sudah pack','Tidak perlu'], key:0}
+  let endpoint='', accessCode='', connected=false, writing=false;
+  const allowed={
+    '03 Tugasan':{columns:[7],statuses:['Belum mula','Dalam proses','Selesai','Perlu semak']},
+    '08 Packing':{columns:[6,7,8],statuses:['Belum sedia','Sedia','Sudah pack','Tidak perlu']},
+    '15 Dokumen Digital':{columns:[2,3,4],statuses:['Belum sedia','Sedia','Sudah pack','Tidak perlu']}
   };
-  function authenticated() { return !!token && Date.now() < expiry; }
-  async function api(path, options={}) {
-    if (!authenticated()) throw Error('Sesi Google tamat. Sambung semula untuk meneruskan.');
-    const controller=new AbortController(), timeout=setTimeout(()=>controller.abort(),20000);
+  async function request(action,payload={}) {
+    if(!endpoint||!accessCode) throw Error('Masukkan URL Web App dan kod akses kumpulan dahulu.');
+    const controller=new AbortController(),timeout=setTimeout(()=>controller.abort(),45000);
     try {
-      const res = await fetch('https://sheets.googleapis.com/v4/spreadsheets/' + ID + path, {...options, signal:controller.signal, headers:{Authorization:'Bearer '+token,'Content-Type':'application/json',...options.headers}});
-      const result = await res.json();
-      if (!res.ok) { if(res.status===401) {token='';expiry=0;} throw Error(result.error?.message || 'Google Sheets tidak dapat diakses.'); }
-      return result;
-    } catch(error) {if(error.name==='AbortError') throw Error('Sambungan mengambil terlalu lama. Semak Sheet sebelum cuba semula.');throw error;} finally{clearTimeout(timeout);}
+      // text/plain is a CORS-safelisted content type. Avoid a preflight unsupported by Apps Script.
+      // Never use mode:no-cors: an opaque response cannot confirm a successful save.
+      const res=await fetch(endpoint,{method:'POST',mode:'cors',credentials:'omit',redirect:'follow',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify({action,...payload,accessCode}),signal:controller.signal});
+      if(!res.ok) throw Error('Web App tidak dapat diakses. Semak deployment: Execute as Me, Who has access Anyone.');
+      let result;try{result=await res.json();}catch{throw Error('Google tidak memulangkan data planner. Gunakan URL /exec dan akses Anyone.');}
+      if(!result.ok){if(result.code==='UNAUTHORIZED'){connected=false;accessCode='';}throw Error(result.message||'Permintaan tidak berjaya.');}
+      return result.data;
+    } catch(e) {
+      if(e.name==='AbortError') throw Error('Sambungan tamat masa. Refresh dan semak Sheet sebelum cuba menulis semula.');
+      if(e instanceof TypeError) throw Error('Sambungan Web App gagal. Semak internet, URL /exec dan deployment Anyone; jika baru deploy, cuba semula.');
+      throw e;
+    } finally {clearTimeout(timeout);}
   }
-  async function connect(clientId) {
-    if(!/^[\w.-]+\.apps\.googleusercontent\.com$/.test(clientId)) throw Error('Masukkan OAuth Client ID Google yang sah.');
-    if(!window.google?.accounts?.oauth2) throw Error('Log masuk Google belum dimuatkan. Semak sambungan internet dan cuba semula.');
-    await new Promise((resolve,reject)=>{
-      const client=google.accounts.oauth2.initTokenClient({client_id:clientId,scope:SCOPE,callback:r=>{
-        if(r.error) return reject(Error(r.error_description || r.error));
-        if(!google.accounts.oauth2.hasGrantedAllScopes(r,SCOPE)) return reject(Error('Kebenaran Google Sheets diperlukan untuk sync.'));
-        token=r.access_token;expiry=Date.now()+(Number(r.expires_in)-60)*1000;resolve();
-      },error_callback:r=>reject(Error(r.type==='popup_closed'?'Tetingkap log masuk ditutup.':'Tetingkap log masuk disekat. Benarkan popup untuk laman ini.'))});
-      client.requestAccessToken({prompt:''});
-    });
+  async function connect(url,code) {
+    if(!/^https:\/\/script\.google\.com\/macros\/s\/[a-zA-Z0-9_-]+\/exec$/.test(url)) throw Error('Gunakan URL Web App https://script.google.com/macros/s/…/exec.');
+    if(!/^[a-f0-9]{64}$/i.test(code)) throw Error('Salin kod akses 64 aksara daripada setupChengdu.');
+    endpoint=url;accessCode=code;connected=false;
+    // Actual connection is confirmed only after a successful authenticated read.
   }
   async function read(template) {
     if(writing) throw Error('Tunggu perubahan selesai disimpan.');
-    const q=template.sheets.map(s=>'ranges='+encodeURIComponent(quote(s.name)+'!A1:M')).join('&');
-    const res=await api('/values:batchGet?'+q+'&valueRenderOption=FORMATTED_VALUE&dateTimeRenderOption=FORMATTED_STRING');
-    if(res.valueRanges?.length!==template.sheets.length) throw Error('Struktur Sheet berubah. Semak semua tab asal.');
-    return {...template, liveAt:new Date().toISOString(), sheets:template.sheets.map((s,i)=>{
-      const grid=res.valueRanges[i].values || [];
-      return {...s,title:grid[0]?.[0] || s.title,note:grid[1]?.[0] || s.note,headers:(grid[4]||[]).map(String), rows:grid.slice(5).filter(r=>r.some(v=>String(v).trim())).map(r=>Array.from({length:13},(_,c)=>String(r[c]??''))), sourceRows:grid.slice(5).map((r,i)=>r.some(v=>String(v).trim())?i+6:null).filter(Boolean)};
-    })};
+    const result=await request('read');
+    if(!Array.isArray(result?.sheets)||!template.sheets.every(s=>result.sheets.some(t=>t.name===s.name))) throw Error('Struktur Sheet tidak sepadan dengan planner 18 tab.');
+    connected=true;
+    return {...template,...result};
   }
-  async function update(sheet, index, column, value) {
-    const rule=allowed[sheet.name];
-    if(!rule || !rule.columns.includes(column) || !rule.statuses.includes(value)) throw Error('Sel ini tidak boleh diedit melalui checklist.');
+  async function update(sheet,index,column,value) {
+    if(!connected) throw Error('Sambungkan Sheet dahulu.');
+    const rule=allowed[sheet.name],row=sheet.sourceRows?.[index];
+    if(!rule||!rule.columns.includes(column)||!rule.statuses.includes(value)||!Number.isInteger(row)||row<6) throw Error('Sel status tidak sah. Refresh dahulu.');
     if(writing) throw Error('Satu perubahan masih sedang disimpan.');
-    const row=sheet.sourceRows?.[index] ?? index+6;
-    if(!Number.isInteger(row) || row<6) throw Error('Nombor baris tidak sah.');
+    const original=sheet.rows[index];
     writing=true;
     try {
-      const range=quote(sheet.name)+'!A'+row+':M'+row;
-      const current=await api('/values/'+encodeURIComponent(range));
-      const actual=current.values?.[0] || [];
-      if(String(actual[rule.key]??'')!==sheet.rows[index][rule.key]) throw Error('Baris telah dipindahkan. Refresh dahulu sebelum menanda.');
-      if(String(actual[column]??'')!==sheet.rows[index][column]) throw Error('Status telah diubah oleh rakan. Refresh untuk melihat status terbaru.');
-      const cell=quote(sheet.name)+'!'+String.fromCharCode(65+column)+row;
-      await api('/values/'+encodeURIComponent(cell)+'?valueInputOption=RAW',{method:'PUT',body:JSON.stringify({range:cell,majorDimension:'ROWS',values:[[value]]})});
-      // Only report success after an independent read confirms the saved value.
-      const check=await api('/values/'+encodeURIComponent(cell));
-      if(check.values?.[0]?.[0]!==value) throw Error('Status belum dapat disahkan. Refresh dan semak sebelum cuba semula.');
-      sheet.rows[index][column]=value;
-      return {range:cell,at:new Date().toISOString()};
+      const saved=await request('update',{sheet:sheet.name,row,column,value,expected:original[column],identity:JSON.stringify([String(original[0]||''),String(original[1]||'')]),requestId:crypto.randomUUID()});
+      if(saved?.value!==value||saved?.row!==row||saved?.column!==column||saved?.sheet!==sheet.name) throw Error('Simpanan belum dapat disahkan. Refresh dan semak Sheet.');
+      sheet.rows[index][column]=saved.value;
+      return saved;
     } finally {writing=false;}
   }
-  function disconnect(){token='';expiry=0;}
-  window.ChengduSheets = {connect,read,update,disconnect,authenticated,get busy(){return writing;}};
+  function disconnect(){accessCode='';endpoint='';connected=false;}
+  window.ChengduSheets={connect,read,update,disconnect,authenticated:()=>connected,get busy(){return writing;}};
 })();
