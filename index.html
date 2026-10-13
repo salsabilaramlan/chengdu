@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="ms">
+<head>
+  <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="theme-color" content="#193b32">
+  <meta name="description" content="Chengdu Escape: jurnal perjalanan musim sejuk 5–10 Disember 2026 untuk Sal Sabila, Ain dan Afifah. Jadual, tugasan, packing, bajet dan panduan perjalanan.">
+  <title>Chengdu Escape — Winter 2026</title>
+  <link rel="stylesheet" href="styles.css">
+  <link rel="icon" href="favicon.svg" type="image/svg+xml">
+</head>
+<body>
+<a class="skip" href="#content">Terus ke kandungan</a>
+<header class="topbar">
+ <a class="brand" href="#home" aria-label="Chengdu Escape, halaman utama"><span class="brand-mark">c<span>e</span></span><span>CHENGDU ESCAPE<small>WINTER JOURNAL · 2026</small></span></a>
+ <nav aria-label="Navigasi utama" class="toplinks"><a href="#itinerary">Perjalanan</a><a href="#tasks">Pasukan</a><a href="#guide">Panduan</a></nav>
+ <div class="top-actions"><button id="search-toggle" class="icon-btn" aria-label="Cari dalam planner"></button><a href="#sync" class="sheet-btn" id="sync-badge">Sambung Google</a><a id="sheet-link" class="sheet-btn" target="_blank" rel="noopener">Sheets <span>↗</span></a></div>
+</header>
+<div id="search-panel" hidden><div class="search-inner"><label for="global-search">Cari dalam semua 18 tab</label><div class="search-field"><input id="global-search" placeholder="Contoh: bas 408, power bank, insurans…" type="search"><button id="search-close" aria-label="Tutup carian">×</button></div><div id="global-results" aria-live="polite"></div></div></div>
+<main id="content" tabindex="-1"><div id="app"><div class="initial-loading"><span class="brand-mark">ce</span><p>Menyediakan jurnal perjalanan…</p></div></div></main>
+<nav class="bottom-nav" aria-label="Navigasi telefon"><a href="#home" data-mobile="home"></a><a href="#itinerary" data-mobile="itinerary"></a><a href="#tasks" data-mobile="tasks"></a><a href="#packing" data-mobile="packing"></a><a href="#guide" data-mobile="guide"></a></nav>
+<footer><div><span class="footer-brand">Chengdu Escape.</span><p>Sal Sabila · Ain · Afifah<br>5–10 Disember 2026</p></div><div><p id="footer-sync">Snapshot Sheets · 13 Oktober 2026<br>Sambungkan Google untuk checklist bersama.</p><a href="#sync">Tetapan sambungan</a> · <button id="print-btn">Cetak halaman</button></div></footer>
+<div id="toast" role="status" aria-live="polite"></div>
+<dialog id="detail-dialog"><div id="detail-body"></div><button id="detail-close" class="dialog-close" aria-label="Tutup butiran">×</button></dialog>
+<script src="https://accounts.google.com/gsi/client" async defer></script>
+<script src="config.js"></script><script src="sheets.js"></script><script src="app.js" defer></script>
+</body></html>
